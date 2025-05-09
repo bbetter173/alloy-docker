@@ -8,4 +8,4 @@ ENV OTLP_ENDPOINT=
 ENV OTLP_BASIC_AUTH_USERNAME=
 ENV OTLP_BASIC_AUTH_PASSWORD=
 
-CMD ["--config.file=/etc/alloy/config.alloy"]
+CMD ["run", "/etc/alloy/config.alloy"]
