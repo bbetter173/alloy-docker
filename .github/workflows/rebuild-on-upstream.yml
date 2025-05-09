@@ -1,6 +1,9 @@
 name: Rebuild on Upstream Update
 
 on:
+  push:
+    branches:
+      - main
   schedule:
     - cron: '0 6 * * *' # Runs daily at 6am UTC
   workflow_dispatch:
