@@ -1,0 +1,50 @@
+logging {
+  level = "info"
+  format = "logfmt"
+}
+
+otelcol.receiver.otlp "default" {
+  http {
+    endpoint = "127.0.0.1:4318"
+  }
+
+  output {
+    metrics = [otelcol.processor.batch.default.input]
+    logs    = [otelcol.processor.batch.default.input]
+    traces  = [otelcol.processor.batch.default.input]
+  }
+}
+
+otelcol.processor.batch "default" {
+  output {
+    metrics = [otelcol.processor.attributes.default.input]
+    logs    = [otelcol.processor.attributes.default.input]
+    traces  = [otelcol.processor.attributes.default.input]
+  }
+}
+
+otelcol.processor.attributes "default" {
+  action {
+    key = "deployment.environment.name"
+    value = sys.env("ATTR_DEPLOYMENT_ENVIRONMENT_NAME")
+    action = "insert"
+  }
+
+  output {
+    metrics = [otelcol.exporter.otlp.default.input]
+    logs    = [otelcol.exporter.otlp.default.input]
+    traces  = [otelcol.exporter.otlp.default.input]
+  }
+}
+
+otelcol.auth.basic "default" {
+  username = sys.env("GRAFANA_CLOUD_ACCOUNT_ID")
+  password = sys.env("GRAFANA_CLOUD_API_KEY")
+}
+
+otelcol.exporter.otlphttp "default" {
+  client {
+    endpoint = sys.env("GRAFANA_CLOUD_OTEL_ENDPOINT")
+    auth     = otelcol.auth.basic.default.handler
+  }
+}
