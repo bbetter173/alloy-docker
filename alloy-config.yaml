@@ -3,9 +3,15 @@ logging {
   format = "logfmt"
 }
 
+
+otelcol.auth.bearer "incoming" {
+  token = sys.env("OTLP_RECEIVER_BEARER_TOKEN")
+}
+
 otelcol.receiver.otlp "default" {
   http {
-    endpoint = "127.0.0.1:4318"
+    endpoint = "0.0.0.0:4318"
+    auth = otelcol.auth.bearer.incoming.handler
   }
 
   output {
@@ -13,6 +19,7 @@ otelcol.receiver.otlp "default" {
     logs    = [otelcol.processor.batch.default.input]
     traces  = [otelcol.processor.batch.default.input]
   }
+
 }
 
 otelcol.processor.batch "default" {
