@@ -3,7 +3,6 @@ logging {
   format = "logfmt"
 }
 
-
 otelcol.auth.bearer "incoming" {
   token = sys.env("OTLP_RECEIVER_BEARER_TOKEN")
 }
@@ -11,6 +10,11 @@ otelcol.auth.bearer "incoming" {
 otelcol.receiver.otlp "default" {
   http {
     endpoint = "0.0.0.0:4318"
+    auth = otelcol.auth.bearer.incoming.handler
+  }
+
+  grpc {
+    endpoint = "0.0.0.0:4317"
     auth = otelcol.auth.bearer.incoming.handler
   }
 

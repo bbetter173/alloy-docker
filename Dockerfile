@@ -12,4 +12,6 @@ ENV OTLP_BASIC_AUTH_PASSWORD=
 # Bearer token for the incoming collector
 ENV OTLP_RECEIVER_BEARER_TOKEN=
 
+EXPOSE 4317 4318
+
 CMD ["run", "/etc/alloy/config.alloy"]
