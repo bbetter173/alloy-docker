@@ -1,0 +1,252 @@
+logging {
+  level = sys.env("LOG_LEVEL")
+  format = "logfmt"
+}
+
+otelcol.auth.bearer "incoming" {
+  token = sys.env("OTLP_RECEIVER_BEARER_TOKEN")
+}
+
+otelcol.receiver.otlp "default" {
+  http {
+    endpoint = "0.0.0.0:4318"
+    auth = otelcol.auth.bearer.incoming.handler
+  }
+
+  grpc {
+    endpoint = "0.0.0.0:4317"
+    auth = otelcol.auth.bearer.incoming.handler
+  }
+
+  output {
+    metrics = [otelcol.processor.batch.default.input]
+    logs    = [otelcol.processor.batch.default.input]
+    traces  = [otelcol.processor.batch.default.input]
+  }
+
+}
+
+otelcol.processor.batch "default" {
+  output {
+    metrics = [otelcol.processor.attributes.default.input]
+    logs    = [otelcol.processor.attributes.default.input]
+    traces  = [otelcol.processor.attributes.default.input]
+  }
+}
+
+otelcol.processor.attributes "default" {
+  action {
+    key = "deployment.environment"
+    value = sys.env("ATTR_DEPLOYMENT_ENVIRONMENT_NAME")
+    action = "insert"
+  }
+
+  output {
+    metrics = [otelcol.exporter.otlphttp.default.input]
+    logs    = [otelcol.exporter.otlphttp.default.input]
+    traces  = [otelcol.exporter.otlphttp.default.input]
+  }
+}
+
+otelcol.auth.basic "default" {
+  username = sys.env("OTLP_BASIC_AUTH_USERNAME")
+  password = sys.env("OTLP_BASIC_AUTH_PASSWORD")
+}
+
+otelcol.exporter.otlphttp "default" {
+  client {
+    endpoint = sys.env("OTLP_ENDPOINT")
+    auth     = otelcol.auth.basic.default.handler
+  }
+}
+
+# Cloudwatch configuration
+
+prometheus.exporter.cloudwatch "aws_metrics" {
+  region = sys.env("AWS_REGION")
+  aws_sdk_version_v2 = false
+  
+  # API Gateway metrics
+  discovery {
+    type = "AWS/ApiGateway"
+    regions = [sys.env("AWS_REGION")]
+
+    metric {
+      name = "Count"
+      statistics = ["Sum"]
+      period = "5m"
+    }
+
+    metric {
+      name = "Latency"
+      statistics = ["Average"]
+      period = "5m"
+    }
+
+    metric {
+      name = "4XXError"
+      statistics = ["Sum"]
+      period = "5m"
+    }
+
+    metric {
+      name = "5XXError"
+      statistics = ["Sum"]
+      period = "5m"
+    }
+  }
+  
+  # Lambda metrics
+  discovery {
+    type = "AWS/Lambda"
+    regions = [sys.env("AWS_REGION")]
+
+    metric {
+      name = "Duration"
+      statistics = ["Average"]
+      period = "5m"
+    }
+
+    metric {
+      name = "Errors"
+      statistics = ["Sum"]
+      period = "5m"
+    }
+
+    metric {
+      name = "Invocations"
+      statistics = ["Sum"]
+      period = "5m"
+    }
+
+    metric {
+      name = "Throttles"
+      statistics = ["Sum"]
+      period = "5m"
+    }
+  }
+  
+  # EC2 metrics
+  discovery {
+    type = "AWS/EC2"
+    regions = [sys.env("AWS_REGION")]
+
+    metric {
+      name = "CPUUtilization"
+      statistics = ["Average"]
+      period = "5m"
+    }
+
+    metric {
+      name = "NetworkIn"
+      statistics = ["Sum"]
+      period = "5m"
+    }
+
+    metric {
+      name = "NetworkOut"
+      statistics = ["Sum"]
+      period = "5m"
+    }
+  }
+  
+  # DynamoDB metrics
+  discovery {
+    type = "AWS/DynamoDB"
+    regions = [sys.env("AWS_REGION")]
+
+    metric {
+      name = "ConsumedReadCapacityUnits"
+      statistics = ["Sum"]
+      period = "5m"
+    }
+
+    metric {
+      name = "ConsumedWriteCapacityUnits"
+      statistics = ["Sum"]
+      period = "5m"
+    }
+
+    metric {
+      name = "ThrottledRequests"
+      statistics = ["Sum"]
+      period = "5m"
+    }
+  }
+  
+  # Application Load Balancer metrics
+  discovery {
+    type = "AWS/ApplicationELB"
+    regions = [sys.env("AWS_REGION")]
+
+    metric {
+      name = "RequestCount"
+      statistics = ["Sum"]
+      period = "5m"
+    }
+
+    metric {
+      name = "TargetResponseTime"
+      statistics = ["Average"]
+      period = "5m"
+    }
+
+    metric {
+      name = "HTTPCode_Target_4XX_Count"
+      statistics = ["Sum"]
+      period = "5m"
+    }
+
+    metric {
+      name = "HTTPCode_Target_5XX_Count"
+      statistics = ["Sum"]
+      period = "5m"
+    }
+  }
+  
+  # Network Load Balancer metrics
+  discovery {
+    type = "AWS/NetworkELB"
+    regions = [sys.env("AWS_REGION")]
+
+    metric {
+      name = "ActiveFlowCount"
+      statistics = ["Average"]
+      period = "5m"
+    }
+
+    metric {
+      name = "NewFlowCount"
+      statistics = ["Sum"]
+      period = "5m"
+    }
+  }
+}
+
+prometheus.scrape "cloudwatch" {
+  targets = prometheus.exporter.cloudwatch.aws_metrics.targets
+  forward_to = [prometheus.relabel.cloudwatch.receiver]
+  scrape_interval = "60s"
+}
+
+prometheus.relabel "cloudwatch" {
+  forward_to = [otelcol.receiver.prometheus.cloudwatch.receiver]
+  
+  # Add region label to all CloudWatch metrics
+  rule {
+    target_label = "region"
+    replacement = sys.env("AWS_REGION")
+  }
+  
+  # Add job label for CloudWatch metrics
+  rule {
+    target_label = "job"
+    replacement = "cloudwatch-exporter"
+  }
+}
+
+otelcol.receiver.prometheus "cloudwatch" {
+  output {
+    metrics = [otelcol.processor.batch.default.input]
+  }
+}
