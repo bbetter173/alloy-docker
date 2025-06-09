@@ -3,7 +3,7 @@ name: Rebuild on Upstream Update
 on:
   push:
     branches:
-      - main
+      - '**' # Allow all branches
   schedule:
     - cron: '0 6 * * *' # Runs daily at 6am UTC
   workflow_dispatch:
@@ -16,6 +16,8 @@ on:
 jobs:
   check-and-build:
     runs-on: ubuntu-latest
+    # Skip scheduled runs on non-main branches
+    if: github.event_name != 'schedule' || github.ref_name == 'main'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -26,15 +28,42 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Get latest upstream tag
+      - name: Detect branch type
+        id: branch_info
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "is_main=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_main=false" >> $GITHUB_OUTPUT
+            # Create branch-safe name (replace slashes and special chars with dashes)
+            branch_safe=$(echo "${{ github.ref_name }}" | sed 's/[^a-zA-Z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-\|-$//g')
+            echo "branch_safe=$branch_safe" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Get base tag for build
         id: get_tag
         run: |
           if [ -n "${{ github.event.inputs.rebuild_tag }}" ]; then
-            echo "tag=${{ github.event.inputs.rebuild_tag }}" >> $GITHUB_OUTPUT
+            base_tag="${{ github.event.inputs.rebuild_tag }}"
+          elif [ "${{ steps.branch_info.outputs.is_main }}" = "true" ]; then
+            # Main branch: fetch latest upstream tag
+            base_tag=$(curl -s "https://registry.hub.docker.com/v2/repositories/grafana/alloy/tags?page_size=100" | jq -r '.results[].name' | grep -E '^v?[0-9]+(\.[0-9]+)*$' | grep -v '-' | sort -V | tail -n1)
           else
-            latest_tag=$(curl -s "https://registry.hub.docker.com/v2/repositories/grafana/alloy/tags?page_size=100" | jq -r '.results[].name' | grep -E '^v?[0-9]+(\.[0-9]+)*$' | grep -v '-' | sort -V | tail -n1)
-            echo "tag=$latest_tag" >> $GITHUB_OUTPUT
+            # Non-main branch: use last built tag from main
+            base_tag=$(cat .last_built_tag 2>/dev/null || echo 'v1.0.0')
           fi
+          
+          if [ "${{ steps.branch_info.outputs.is_main }}" = "true" ]; then
+            # Main branch: use base tag as-is
+            final_tag="$base_tag"
+          else
+            # Non-main branch: create unique tag with branch and commit
+            short_sha=$(echo "${{ github.sha }}" | cut -c1-7)
+            final_tag="${base_tag}-${{ steps.branch_info.outputs.branch_safe }}-${short_sha}"
+          fi
+          
+          echo "base_tag=$base_tag" >> $GITHUB_OUTPUT
+          echo "final_tag=$final_tag" >> $GITHUB_OUTPUT
 
       - name: Read last built tag
         id: last_tag
@@ -46,7 +75,11 @@ jobs:
         run: |
           if [ -n "${{ github.event.inputs.rebuild_tag }}" ]; then
             echo "new_tag=true" >> $GITHUB_OUTPUT
-          elif [ "${{ steps.get_tag.outputs.tag }}" != "${{ env.LAST_TAG }}" ]; then
+          elif [ "${{ steps.branch_info.outputs.is_main }}" = "false" ]; then
+            # Non-main branches: always build (unique tag per commit)
+            echo "new_tag=true" >> $GITHUB_OUTPUT
+          elif [ "${{ steps.get_tag.outputs.base_tag }}" != "${{ env.LAST_TAG }}" ]; then
+            # Main branch: build only if upstream tag changed
             echo "new_tag=true" >> $GITHUB_OUTPUT
           else
             echo "new_tag=false" >> $GITHUB_OUTPUT
@@ -65,18 +98,18 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/alloy-custom:${{ steps.get_tag.outputs.tag }}
+          tags: ghcr.io/${{ github.repository_owner }}/alloy-custom:${{ steps.get_tag.outputs.final_tag }}
           build-args: |
-            ALLOY_TAG=${{ steps.get_tag.outputs.tag }}
+            ALLOY_TAG=${{ steps.get_tag.outputs.base_tag }}
           platforms: linux/amd64,linux/arm64
 
       - name: Update last built tag
-        if: steps.compare.outputs.new_tag == 'true'
-        run: echo "${{ steps.get_tag.outputs.tag }}" > .last_built_tag
+        if: steps.compare.outputs.new_tag == 'true' && steps.branch_info.outputs.is_main == 'true'
+        run: echo "${{ steps.get_tag.outputs.base_tag }}" > .last_built_tag
 
       - name: Commit and push .last_built_tag
-        if: steps.compare.outputs.new_tag == 'true'
+        if: steps.compare.outputs.new_tag == 'true' && steps.branch_info.outputs.is_main == 'true'
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: Update last built tag
+          commit_message: Update last built tag to ${{ steps.get_tag.outputs.base_tag }}
           file_pattern: .last_built_tag
