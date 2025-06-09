@@ -221,6 +221,48 @@ prometheus.exporter.cloudwatch "aws_metrics" {
       period = "5m"
     }
   }
+  
+  # ECS metrics
+  discovery {
+    type = "AWS/ECS"
+    regions = [sys.env("AWS_REGION")]
+
+    metric {
+      name = "CPUUtilization"
+      statistics = ["Average"]
+      period = "5m"
+    }
+
+    metric {
+      name = "MemoryUtilization"
+      statistics = ["Average"]
+      period = "5m"
+    }
+
+    metric {
+      name = "RunningTaskCount"
+      statistics = ["Average"]
+      period = "5m"
+    }
+
+    metric {
+      name = "PendingTaskCount"
+      statistics = ["Average"]
+      period = "5m"
+    }
+
+    metric {
+      name = "ActiveServiceCount"
+      statistics = ["Average"]
+      period = "5m"
+    }
+
+    metric {
+      name = "ServiceCount"
+      statistics = ["Average"]
+      period = "5m"
+    }
+  }
 }
 
 prometheus.scrape "cloudwatch" {
