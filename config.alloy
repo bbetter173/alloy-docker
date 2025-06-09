@@ -60,13 +60,13 @@ otelcol.exporter.otlphttp "default" {
   }
 }
 
-# Cloudwatch configuration
+// Cloudwatch configuration
 
 prometheus.exporter.cloudwatch "aws_metrics" {
   region = sys.env("AWS_REGION")
   aws_sdk_version_v2 = false
   
-  # API Gateway metrics
+  // API Gateway metrics
   discovery {
     type = "AWS/ApiGateway"
     regions = [sys.env("AWS_REGION")]
@@ -96,7 +96,7 @@ prometheus.exporter.cloudwatch "aws_metrics" {
     }
   }
   
-  # Lambda metrics
+  // Lambda metrics
   discovery {
     type = "AWS/Lambda"
     regions = [sys.env("AWS_REGION")]
@@ -126,7 +126,7 @@ prometheus.exporter.cloudwatch "aws_metrics" {
     }
   }
   
-  # EC2 metrics
+  // EC2 metrics
   discovery {
     type = "AWS/EC2"
     regions = [sys.env("AWS_REGION")]
@@ -150,7 +150,7 @@ prometheus.exporter.cloudwatch "aws_metrics" {
     }
   }
   
-  # DynamoDB metrics
+  // DynamoDB metrics
   discovery {
     type = "AWS/DynamoDB"
     regions = [sys.env("AWS_REGION")]
@@ -174,7 +174,7 @@ prometheus.exporter.cloudwatch "aws_metrics" {
     }
   }
   
-  # Application Load Balancer metrics
+  // Application Load Balancer metrics
   discovery {
     type = "AWS/ApplicationELB"
     regions = [sys.env("AWS_REGION")]
@@ -204,7 +204,7 @@ prometheus.exporter.cloudwatch "aws_metrics" {
     }
   }
   
-  # Network Load Balancer metrics
+  // Network Load Balancer metrics
   discovery {
     type = "AWS/NetworkELB"
     regions = [sys.env("AWS_REGION")]
@@ -222,7 +222,7 @@ prometheus.exporter.cloudwatch "aws_metrics" {
     }
   }
   
-  # ECS metrics
+  // ECS metrics
   discovery {
     type = "AWS/ECS"
     regions = [sys.env("AWS_REGION")]
@@ -274,16 +274,22 @@ prometheus.scrape "cloudwatch" {
 prometheus.relabel "cloudwatch" {
   forward_to = [otelcol.receiver.prometheus.cloudwatch.receiver]
   
-  # Add region label to all CloudWatch metrics
+  // Add region label to all CloudWatch metrics
   rule {
     target_label = "region"
     replacement = sys.env("AWS_REGION")
   }
   
-  # Add job label for CloudWatch metrics
+  // Add job label for CloudWatch metrics
   rule {
     target_label = "job"
     replacement = "cloudwatch-exporter"
+  }
+
+  // Add environment label for CloudWatch metrics
+  rule {
+    target_label = "environment"
+    replacement = sys.env("ATTR_DEPLOYMENT_ENVIRONMENT_NAME")
   }
 }
 
